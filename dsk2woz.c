@@ -210,7 +210,7 @@ static const uint32_t crc32_tab[] = {
 	@param size The size of the data to compute a CRC32 from.
 	@return The computed CRC32.
 */
-uint32_t crc32(const uint8_t *buf, size_t size) {
+static uint32_t crc32(const uint8_t *buf, size_t size) {
 	uint32_t crc = ~0;
 	size_t byte = 0;
 	while (size--) {
