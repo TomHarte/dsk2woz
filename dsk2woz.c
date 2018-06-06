@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 
+// Forward declarations; see definitions for documentation.
 static uint32_t crc32(const uint8_t *buf, size_t size);
 static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number, bool is_prodos);
 
@@ -116,7 +117,7 @@ int main(int argc, char *argv[]) {
 		serialise_track(&woz[output_pointer], &dsk[c * 16 * 256], c, is_prodos);
 		output_pointer += 6656;
 	}
-	#undef set_int32
+#undef set_int32
 
 
 
@@ -202,6 +203,13 @@ static const uint32_t crc32_tab[] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
+/*!
+	Computes the CRC32 of an input buffer.
+
+	@param buf A pointer to the data to compute a CRC32 from.
+	@param size The size of the data to compute a CRC32 from.
+	@return The computed CRC32.
+*/
 uint32_t crc32(const uint8_t *buf, size_t size) {
 	uint32_t crc = ~0;
 	size_t byte = 0;
@@ -218,11 +226,33 @@ uint32_t crc32(const uint8_t *buf, size_t size) {
 	DSK sector serialiser. Constructs the 6-and-2 DOS 3.3-style on-disk
 	representation of a DOS logical-order sector dump.
 */
+
+/*!
+	Appends a bit to a buffer at a supplied position, returning the
+	position immediately after the bit. The first bit added to a buffer
+	will be stored in the MSB of the first byte. The second will be stored in
+	bit 6. The eighth will be stored in the MSB of the second byte. Etc.
+
+	@param buffer The buffer to write into.
+	@param position The position to write at.
+	@param value An indicator of the bit to write. If this is zero then a 0 is written; otherwise a 1 is written.
+	@return The position immediately after the bit.
+*/
 static size_t write_bit(uint8_t *buffer, size_t position, int value) {
 	buffer[position >> 3] |= (value ? 0x80 : 0x00) >> (position & 7);
 	return position + 1;
 }
 
+/*!
+	Appends a byte to a buffer at a supplied position, returning the
+	position immediately after the byte. This is equivalent to calling
+	write_bit eight times, supplying bit 7, then bit 6, down to bit 0.
+
+	@param buffer The buffer to write into.
+	@param position The position to write at.
+	@param value The byte to write.
+	@return The position immediately after the byte.
+*/
 static size_t write_byte(uint8_t *buffer, size_t position, int value) {
 	int mask = 0x80;
 	while(mask) {
@@ -232,12 +262,27 @@ static size_t write_byte(uint8_t *buffer, size_t position, int value) {
 	return position;
 }
 
+/*!
+	Encodes a byte into Apple 4-and-4 format and appends it to a buffer.
+
+	@param buffer The buffer to write into.
+	@param position The position to write at.
+	@param value The byte to encode and write.
+	@return The position immediately after the byte.
+*/
 static size_t write_4_and_4(uint8_t *buffer, size_t position, int value) {
 	position = write_byte(buffer, position, (value >> 1) | 0xaa);
 	position = write_byte(buffer, position, value | 0xaa);
 	return position;
 }
 
+/*!
+	Appends a 6-and-2-style sync word to a buffer.
+
+	@param buffer The buffer to write into.
+	@param position The position to write at.
+	@return The position immediately after the sync word.
+*/
 static size_t write_sync(uint8_t *buffer, size_t position) {
 	position = write_byte(buffer, position, 0xff);
 	position = write_bit(buffer, position, 0);
@@ -245,6 +290,13 @@ static size_t write_sync(uint8_t *buffer, size_t position) {
 	return position;
 }
 
+/*!
+	Converts a 256-byte source buffer into the 343 byte values that
+	contain the Apple 6-and-2 encoding of that buffer.
+
+	@param dest The at-least-343 byte buffer to which the encoded sector is written.
+	@param src The 256-byte source data.
+*/
 static void encode_6_and_2(uint8_t *dest, const uint8_t *src) {
 	const uint8_t six_and_two_mapping[] = {
 		0x96, 0x97, 0x9a, 0x9b, 0x9d, 0x9e, 0x9f, 0xa6,
@@ -291,10 +343,19 @@ static void encode_6_and_2(uint8_t *dest, const uint8_t *src) {
 	for(size_t c = 0; c < 343; ++c) {
 		dest[c] = six_and_two_mapping[dest[c]];
 	}
-
 }
 
-void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number, bool is_prodos) {
+/*!
+	Converts a DSK-style track to a WOZ-style track.
+
+	@param dest The 6646-byte buffer that will contain the WOZ track. Both track contents and the
+		proper suffix will be written.
+	@param src The 4096-byte buffer that contains the DSK track — 16 instances of 256 bytes, each
+		a fully-decoded sector.
+	@param track_number The track number to encode into this track.
+	@param is_prodos @c true if the DSK image is in Pro-DOS order; @c false if it is in DOS 3.3 order.
+*/
+static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number, bool is_prodos) {
 	size_t track_position = 0;	// This is the track position **in bits**.
 	memset(dest, 0, 6646);
 
@@ -366,5 +427,5 @@ void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number, bo
 	dest[6647] = (track_position >> 11) & 0xff;	// Byte count.
 	dest[6648] = track_position & 0xff;
 	dest[6649] = (track_position >> 8) & 0xff;	// Bit count.
-	dest[6650] =  dest[6651] = 0xff;			// Splice information: none.
+	dest[6650] = dest[6651] = 0xff;				// Splice information: none.
 }
