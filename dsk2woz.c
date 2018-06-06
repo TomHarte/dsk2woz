@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
 	// Create a buffer for the portion of the WOZ image that comes after
 	// the 12-byte header. The header will house the CRC, which will be
 	// calculated later.
-	const size_t woz_image_size = 256 + 35*6656;
+	const size_t woz_image_size = 256 - 12 + 35*6656;
 	uint8_t woz[woz_image_size];
 #define set_int32(location, value)	\
 	woz[location] = (value) & 0xff;	\
@@ -98,15 +98,14 @@ int main(int argc, char *argv[]) {
 	//
 	// The remaining quarter-track position maps to nothing, which in
 	// WOZ is indicated with a value of 255.
+    // Let's start by filling the entire TMAP with empty tracks.
+    memset(&woz[76], 0xff, 160);
+    // Then we will add in the mappings.
 	for(int c = 0; c < 35; ++c) {
-		if (c > 0) woz[75 + (c << 2)] = c;
-		woz[76 + (c << 2)] = woz[77 + (c << 2)] = c;
-		woz[78 + (c << 2)] = woz[79 + (c << 2)] = 255;
+        int track_position = 76 + (c << 2);
+		if (c > 0) woz[track_position - 1] = c;
+		woz[track_position] = woz[track_position + 1] = c;
 	}
-
-	// So there are 20 track slots that a DSK doesn't reach; set them
-	// to no-track-mapped.
-	memset(&woz[76 + (35 << 2)], 20, 0xff);
 
 
 
@@ -114,7 +113,7 @@ int main(int argc, char *argv[]) {
 		WOZ image item 3: a TRKS chunk.
 	*/
 	strcpy((char *)&woz[236], "TRKS");	// Chunk ID.
-	set_int32(240, 35*65536);			// Chunk size.
+	set_int32(240, 35*6656);			// Chunk size.
 
 	// The output pointer holds a byte position into the WOZ buffer.
 	size_t output_pointer = 244;
@@ -366,16 +365,16 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 	size_t track_position = 0;	// This is the track position **in bits**.
 	memset(dest, 0, 6646);
 
+    // Write the gap 1.
+    for(int c = 0; c < 16; ++c) {
+        track_position = write_sync(dest, track_position);
+    }
+    
 	// Step through the physical sector.
 	for(int sector = 0; sector < 16; ++sector) {
 		/*
 			Write the sector header.
 		*/
-
-		// Lead-in.
-		for(int c = 0; c < 10; ++c) {
-			track_position = write_sync(dest, track_position);
-		}
 
 		// Prologue.
 		track_position = write_byte(dest, track_position, 0xd5);
@@ -394,14 +393,14 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 		track_position = write_byte(dest, track_position, 0xeb);
 
 
-
+        // Write the gap 2.
+        for(int c = 0; c < 7; ++c) {
+            track_position = write_sync(dest, track_position);
+        }
+        
 		/*
 			Write the sector body.
 		*/
-		// Lead-in.
-		for(int c = 0; c < 10; ++c) {
-			track_position = write_sync(dest, track_position);
-		}
 
 		// Prologue.
 		track_position = write_byte(dest, track_position, 0xd5);
@@ -422,17 +421,19 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 		track_position = write_byte(dest, track_position, 0xde);
 		track_position = write_byte(dest, track_position, 0xaa);
 		track_position = write_byte(dest, track_position, 0xeb);
-	}
-	
-	// Pad out to roughly 50,000 bits.
-	while(track_position < 50000) {
-		track_position = write_sync(dest, track_position);
-	}
 
+        // Write the gap 3.
+        for(int c = 0; c < 16; ++c) {
+            track_position = write_sync(dest, track_position);
+        }
+    }
+	
 	// Add the track suffix.
 	dest[6646] = (track_position >> 3) & 0xff;
 	dest[6647] = (track_position >> 11) & 0xff;	// Byte count.
 	dest[6648] = track_position & 0xff;
 	dest[6649] = (track_position >> 8) & 0xff;	// Bit count.
-	dest[6650] = dest[6651] = 0xff;				// Splice information: none.
+	dest[6650] = dest[6651] = 0x00;				// Splice information.
+    dest[6652] = 0xff;
+    dest[6653] = 10;
 }
