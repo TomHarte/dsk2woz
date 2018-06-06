@@ -1,10 +1,11 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
 static uint32_t crc32(const uint8_t *buf, size_t size);
-static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number);
+static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number, bool is_prodos);
 
 int main(int argc, char *argv[]) {
 	// Announce failure if there are anything other than three arguments.
@@ -23,6 +24,17 @@ int main(int argc, char *argv[]) {
 	uint8_t dsk[dsk_image_size];
 	const size_t bytes_read = fread(dsk, 1, dsk_image_size, dsk_file);
 	fclose(dsk_file);
+
+	// Determine from the filename whether to use Pro-DOS sector order.
+	bool has_p = false;
+	bool has_dot = false;
+	const char *extension = argv[1] + strlen(argv[1]);
+	do {
+		has_p = *extension == 'p';
+		has_dot = *extension == '.';
+		--extension;
+	} while(extension > argv[1] && *extension != '/' && *extension != '.');
+	const bool is_prodos = has_p && has_dot;
 
 	// If the DSK image was too short, announce failure. Some DSK files
 	// seem empirically to be too long, but it's unclear that the extra
@@ -101,7 +113,7 @@ int main(int argc, char *argv[]) {
 
 	// Write out all 35 tracks.
 	for(int c = 0; c < 35; ++c) {
-		serialise_track(&woz[output_pointer], &dsk[c * 16 * 256], c);
+		serialise_track(&woz[output_pointer], &dsk[c * 16 * 256], c, is_prodos);
 		output_pointer += 6656;
 	}
 	#undef set_int32
@@ -282,7 +294,7 @@ static void encode_6_and_2(uint8_t *dest, const uint8_t *src) {
 
 }
 
-void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number) {
+void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number, bool is_prodos) {
 	size_t track_position = 0;	// This is the track position **in bits**.
 	memset(dest, 0, 6646);
 
@@ -329,7 +341,7 @@ void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_number) {
 		track_position = write_byte(dest, track_position, 0xad);
 
 		// Map from this physical sector to a logical sector.
-		const int logical_sector = (sector == 15) ? 15 : ((sector * 7) % 15);
+		const int logical_sector = (sector == 15) ? 15 : ((sector * (is_prodos ? 8 : 7)) % 15);
 
 		// Sector contents
 		uint8_t contents[343];
