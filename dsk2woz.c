@@ -90,8 +90,14 @@ int main(int argc, char *argv[]) {
 	strcpy((char *)&woz[68], "TMAP");		// Chunk ID.
 	set_int32(72, 160);						// Chunk size.
 
-	// This is a DSK conversion, so the TMAP table is just the next
-	// track in every fourth slot, with 255s in between.
+	// This is a DSK conversion, so the TMAP table simply maps every
+	// track that exists to:
+	// (i) its integral position;
+	// (ii) the quarter-track position before its integral position; and
+	// (iii) the quarter-track position after its integral position.
+	//
+	// The remaining quarter-track position maps to nothing, which in
+	// WOZ is indicated with a value of 255.
 	for(int c = 0; c < 35; ++c) {
 		if (c > 0) woz[75 + (c << 2)] = c;
 		woz[76 + (c << 2)] = woz[77 + (c << 2)] = c;
@@ -110,7 +116,7 @@ int main(int argc, char *argv[]) {
 	strcpy((char *)&woz[236], "TRKS");	// Chunk ID.
 	set_int32(240, 35*65536);			// Chunk size.
 
-	// The output pointer holds a **bit** position into the WOZ buffer.
+	// The output pointer holds a byte position into the WOZ buffer.
 	size_t output_pointer = 244;
 
 	// Write out all 35 tracks.
