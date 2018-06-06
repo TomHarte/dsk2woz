@@ -93,8 +93,9 @@ int main(int argc, char *argv[]) {
 	// This is a DSK conversion, so the TMAP table is just the next
 	// track in every fourth slot, with 255s in between.
 	for(int c = 0; c < 35; ++c) {
-		woz[76 + (c << 2)] = c;
-		woz[77 + (c << 2)] = woz[78 + (c << 2)] = woz[79 + (c << 2)] = 255;
+		if (c > 0) woz[75 + (c << 2)] = c;
+		woz[76 + (c << 2)] = woz[77 + (c << 2)] = c;
+		woz[78 + (c << 2)] = woz[79 + (c << 2)] = 255;
 	}
 
 	// So there are 20 track slots that a DSK doesn't reach; set them
