@@ -50,6 +50,8 @@ int main(int argc, char *argv[]) {
 	// calculated later.
 	const size_t woz_image_size = 256 - 12 + 35*6656;
 	uint8_t woz[woz_image_size];
+	memset(woz, 0, sizeof(woz));
+
 #define set_int32(location, value)	\
 	woz[location] = (value) & 0xff;	\
 	woz[location+1] = ((value) >> 8) & 0xff;	\
@@ -79,8 +81,8 @@ int main(int argc, char *argv[]) {
 	strcpy((char *)&woz[13], creator);
 	memset(&woz[13 + strlen(creator)], 32 - strlen(creator), ' ');
 
-	// Chunk should be padded with 0s to reach 60 bytes in length.
-	memset(&woz[13 + 32], (8+60) - (13 + 32), 0);
+	// Chunk should be padded with 0s to reach 60 bytes in length;
+	// the buffer was memset to 0 at initialisation so that's implicit.
 
 
 
@@ -98,12 +100,13 @@ int main(int argc, char *argv[]) {
 	//
 	// The remaining quarter-track position maps to nothing, which in
 	// WOZ is indicated with a value of 255.
-    // Let's start by filling the entire TMAP with empty tracks.
-    memset(&woz[76], 0xff, 160);
-    // Then we will add in the mappings.
-	for(int c = 0; c < 35; ++c) {
-        int track_position = 76 + (c << 2);
-		if (c > 0) woz[track_position - 1] = c;
+
+	// Let's start by filling the entire TMAP with empty tracks.
+	memset(&woz[76], 0xff, 160);
+	// Then we will add in the mappings.
+	for(size_t c = 0; c < 35; ++c) {
+		const size_t track_position = 76 + (c << 2);
+		if(c > 0) woz[track_position - 1] = c;
 		woz[track_position] = woz[track_position + 1] = c;
 	}
 
@@ -119,7 +122,7 @@ int main(int argc, char *argv[]) {
 	size_t output_pointer = 244;
 
 	// Write out all 35 tracks.
-	for(int c = 0; c < 35; ++c) {
+	for(size_t c = 0; c < 35; ++c) {
 		serialise_track(&woz[output_pointer], &dsk[c * 16 * 256], c, is_prodos);
 		output_pointer += 6656;
 	}
@@ -260,12 +263,13 @@ static size_t write_bit(uint8_t *buffer, size_t position, int value) {
 	@return The position immediately after the byte.
 */
 static size_t write_byte(uint8_t *buffer, size_t position, int value) {
-	int mask = 0x80;
-	while(mask) {
-		position = write_bit(buffer, position, value & mask);
-		mask >>= 1;
-	}
-	return position;
+	const size_t shift = position & 7;
+	const size_t byte_position = position >> 3;
+
+	buffer[byte_position] |= value >> shift;
+	if(shift) buffer[byte_position+1] |= value << (8 - shift);
+
+	return position + 8;
 }
 
 /*!
@@ -274,7 +278,7 @@ static size_t write_byte(uint8_t *buffer, size_t position, int value) {
 	@param buffer The buffer to write into.
 	@param position The position to write at.
 	@param value The byte to encode and write.
-	@return The position immediately after the byte.
+	@return The position immediately after the encoded byte.
 */
 static size_t write_4_and_4(uint8_t *buffer, size_t position, int value) {
 	position = write_byte(buffer, position, (value >> 1) | 0xaa);
@@ -291,9 +295,7 @@ static size_t write_4_and_4(uint8_t *buffer, size_t position, int value) {
 */
 static size_t write_sync(uint8_t *buffer, size_t position) {
 	position = write_byte(buffer, position, 0xff);
-	position = write_bit(buffer, position, 0);
-	position = write_bit(buffer, position, 0);
-	return position;
+	return position + 2; // Skip two bits, i.e. leave them as 0s.
 }
 
 /*!
@@ -365,13 +367,13 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 	size_t track_position = 0;	// This is the track position **in bits**.
 	memset(dest, 0, 6646);
 
-    // Write the gap 1.
-    for(int c = 0; c < 16; ++c) {
-        track_position = write_sync(dest, track_position);
-    }
-    
+	// Write gap 1.
+	for(size_t c = 0; c < 16; ++c) {
+		track_position = write_sync(dest, track_position);
+	}
+
 	// Step through the physical sector.
-	for(int sector = 0; sector < 16; ++sector) {
+	for(size_t sector = 0; sector < 16; ++sector) {
 		/*
 			Write the sector header.
 		*/
@@ -393,11 +395,11 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 		track_position = write_byte(dest, track_position, 0xeb);
 
 
-        // Write the gap 2.
-        for(int c = 0; c < 7; ++c) {
-            track_position = write_sync(dest, track_position);
-        }
-        
+		// Write gap 2.
+		for(size_t c = 0; c < 7; ++c) {
+			track_position = write_sync(dest, track_position);
+		}
+
 		/*
 			Write the sector body.
 		*/
@@ -422,18 +424,18 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 		track_position = write_byte(dest, track_position, 0xaa);
 		track_position = write_byte(dest, track_position, 0xeb);
 
-        // Write the gap 3.
-        for(int c = 0; c < 16; ++c) {
-            track_position = write_sync(dest, track_position);
-        }
-    }
-	
+		// Write gap 3.
+		for(size_t c = 0; c < 16; ++c) {
+			track_position = write_sync(dest, track_position);
+		}
+	}
+
 	// Add the track suffix.
 	dest[6646] = (track_position >> 3) & 0xff;
 	dest[6647] = (track_position >> 11) & 0xff;	// Byte count.
 	dest[6648] = track_position & 0xff;
 	dest[6649] = (track_position >> 8) & 0xff;	// Bit count.
 	dest[6650] = dest[6651] = 0x00;				// Splice information.
-    dest[6652] = 0xff;
-    dest[6653] = 10;
+	dest[6652] = 0xff;
+	dest[6653] = 10;
 }
