@@ -431,8 +431,8 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 	}
 
 	// Add the track suffix.
-	dest[6646] = (track_position >> 3) & 0xff;
-	dest[6647] = (track_position >> 11) & 0xff;	// Byte count.
+	dest[6646] = ((track_position + 7) >> 3) & 0xff;
+	dest[6647] = ((track_position + 7) >> 11) & 0xff;	// Byte count.
 	dest[6648] = track_position & 0xff;
 	dest[6649] = (track_position >> 8) & 0xff;	// Bit count.
 	dest[6650] = dest[6651] = 0x00;				// Splice information.
