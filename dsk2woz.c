@@ -372,7 +372,7 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 		track_position = write_sync(dest, track_position);
 	}
 
-	// Step through the physical sector.
+	// Step through the sectors in physical order.
 	for(size_t sector = 0; sector < 16; ++sector) {
 		/*
 			Write the sector header.
@@ -412,7 +412,7 @@ static void serialise_track(uint8_t *dest, const uint8_t *src, uint8_t track_num
 		// Map from this physical sector to a logical sector.
 		const int logical_sector = (sector == 15) ? 15 : ((sector * (is_prodos ? 8 : 7)) % 15);
 
-		// Sector contents
+		// Sector contents.
 		uint8_t contents[343];
 		encode_6_and_2(contents, &src[logical_sector * 256]);
 		for(size_t c = 0; c < sizeof(contents); ++c) {
