@@ -342,7 +342,7 @@ static void encode_6_and_2(uint8_t *dest, const uint8_t *src) {
 	// Exclusive OR each byte with the one before it.
 	dest[342] = dest[341];
 	size_t location = 342;
-	while(location) {
+	while(location > 1) {
 		--location;
 		dest[location] ^= dest[location-1];
 	}
